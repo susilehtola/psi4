@@ -32,6 +32,7 @@
 // member function on libdpd's DPD class. This file supplies just enough to
 // satisfy the link without dragging in libdpd or core.cc.
 
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -51,16 +52,23 @@ std::shared_ptr<PsiOutStream> outfile;
 
 // libpsio's PSIO::close calls global_dpd_->file4_cache_del_filenum during
 // every file close. In a non-DPD context the cache walk is a no-op anyway,
-// but dereferencing a null global_dpd_ is UB. Provide a minimal local DPD
-// class with the same name and the one referenced method as a no-op, plus a
-// non-null instance to dispatch through. We link without libdpd so there is
-// no ODR clash with the real DPD definition.
+// but dereferencing a null global_dpd_ is UB. Provide a minimal DPD class
+// with the one referenced method as a no-op, plus a non-null instance to
+// dispatch through.
+//
+// This is an ODR violation: close.cc is compiled against the real psi::DPD from
+// libdpd/dpd.h, while this TU defines a different psi::DPD. It holds together
+// only because the call is non-virtual and the mangled name matches. The
+// parameter type must therefore be spelled exactly as in dpd.h -- `size_t`, not
+// `unsigned long`. They coincide on LP64 and nowhere else; on Windows x64
+// `size_t` is `unsigned __int64` while `unsigned long` is 32 bits, and the
+// mismatch is an undefined symbol at link time rather than a diagnostic.
 class DPD {
  public:
-    void file4_cache_del_filenum(unsigned long);
+    void file4_cache_del_filenum(std::size_t);
 };
 
-void DPD::file4_cache_del_filenum(unsigned long) {}
+void DPD::file4_cache_del_filenum(std::size_t) {}
 
 namespace {
 DPD stub_dpd_instance;
