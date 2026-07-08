@@ -34,11 +34,16 @@ list(APPEND sources
   )
 psi4_add_module(lib psio sources)
 
-# The standalone round-trip test links a curated subset of static archives
-# plus a small stubs TU. That works with GNU/Clang on Linux/macOS but not with
-# Windows lld-link, where the unity+PCH build pulls in extra symbol references
-# (Molecule, DPDMOSpace, ...) the curated link line doesn't provide. Restrict
-# it to non-Windows rather than drag in the full dependency closure.
+# The standalone round-trip test links a curated subset of static archives plus a
+# small stubs TU. That resolves with GNU/Clang on Linux/macOS but not with
+# clang-cl/lld-link, which emits inline and implicit functions that GCC discards
+# as unused, so the Windows objects carry undefined references the curated link
+# line does not provide: psio.lib wants DPDMOSpace::~DPDMOSpace (instantiated by
+# std::vector<DPDMOSpace> in dpd.h, reached via close.cc), and psi4util.lib wants
+# Molecule::Molecule(const Molecule&) (from inline Molecule::clone) and
+# ExternalPotential::print (from inline py_print). Not a unity or PCH artifact --
+# Linux is unity-built too, and Azure Windows builds with PCH off. Restrict the
+# test to non-Windows rather than drag in the full libmints/Libint closure.
 if(NOT WIN32)
     add_subdirectory(test)
 endif()

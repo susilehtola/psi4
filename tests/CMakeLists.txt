@@ -121,7 +121,7 @@ add_subdirectory(json)
 
 # C++ unit tests built inside the psi4-core ExternalProject. Skipped on Windows,
 # where their curated link lines do not resolve under lld-link (see
-# src/psi4/libpsio/CMakeLists.txt), so the executables are never built there.
+# psi4/src/psi4/libpsio/CMakeLists.txt), so the executables are never built there.
 if(NOT WIN32)
     add_subdirectory(libpsio)
 endif()
