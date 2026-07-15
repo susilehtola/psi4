@@ -3,7 +3,7 @@
  *
  * Psi4: an open-source quantum chemistry software package
  *
- * Copyright (c) 2007-2025 The Psi4 Developers.
+ * Copyright (c) 2007-2026 The Psi4 Developers.
  *
  * The copyrights for code used from other parties are included in
  * the corresponding files.
@@ -46,8 +46,9 @@ std::shared_ptr<PsiOutStream> outfile;
 
 // libciomr's DSYEV_ascending lands in the same unity TU as helpers libpsio
 // pulls in; the standalone link references its LAPACK wrapper though the test
-// never diagonalizes. A no-op leaf keeps the test self-contained.
-void C_DSYEV(char, char, int, double *, int, double *, double *, int) {}
+// never diagonalizes. A no-op leaf keeps the test self-contained. The signature
+// matches the real declaration in libqt/qt.h (returns int).
+int C_DSYEV(char, char, int, double *, int, double *, double *, int) { return 0; }
 
 // PSIO::close calls global_dpd_->file4_cache_del_filenum on every file close.
 // In a non-DPD context the cache is empty, so a minimal DPD with a no-op method
