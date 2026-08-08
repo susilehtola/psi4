@@ -42,11 +42,11 @@ def test_dependency_extraction():
 def test_functional_available_gate():
     real = {"name": "SVWN", "x_functionals": {"LDA_X": {}},
             "c_functionals": {"LDA_C_VWN_RPA": {}}}
-    assert dft_builder.functional_available(real) is True
+    assert dft_builder.superfunctional_available(real) is True
 
     bad = {"name": "BOGUS", "x_functionals": {"LDA_X": {}},
            "c_functionals": {_FAKE[3:]: {}}}  # strip the XC_ the builder re-adds
-    assert dft_builder.functional_available(bad) is False
+    assert dft_builder.superfunctional_available(bad) is False
     assert dft_builder.unavailable_libxc_functionals(bad) == [_FAKE]
 
 
@@ -74,7 +74,7 @@ def test_th_fl_dual_spelling_registered():
 def test_available_functionals_still_registered():
     # Sanity: a staple functional that IS available remains a runnable method,
     # i.e. the gate did not over-prune.
-    assert dft_builder.functional_available(dft_builder.functionals["pbe"]) is True
+    assert dft_builder.superfunctional_available(dft_builder.functionals["pbe"]) is True
     psi4.core.clean()
     psi4.set_options({"scf_type": "pk"})
     mol = psi4.geometry("He 0 0 0\nsymmetry c1")

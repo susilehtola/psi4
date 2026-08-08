@@ -73,11 +73,9 @@ class LibXCFunctional : public Functional {
     LibXCFunctional(std::string xc_name, bool unpolarized);
     ~LibXCFunctional() override;
 
-    /// Is a functional of this name present in the linked LibXC build? `xc_name`
-    /// is the same "XC_..." string accepted by the constructor. This only looks
-    /// the name up (it does not build the functional), so it is safe to probe
-    /// names that may be absent -- e.g. functionals renamed or added between
-    /// LibXC versions.
+    /// Is a functional of `xc_name` ("XC_..." like the constructor) present in
+    /// the linked LibXC build? This looks up the name but no `xc_func_init` so
+    /// no allocation and safe to probe absent names, which return -1.
     static bool available(const std::string& xc_name);
 
     void compute_functional(const std::map<std::string, SharedVector>& in,
