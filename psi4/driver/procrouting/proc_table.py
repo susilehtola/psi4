@@ -32,7 +32,7 @@ chemical methods.
 from qcelemental.util import which
 
 from . import interface_cfour, proc, proc_data, sapt
-from .dft import build_superfunctional_from_dictionary, functional_available, functionals
+from .dft import build_superfunctional_from_dictionary, superfunctional_available, functionals
 
 # never import wrappers or aliases into this file
 
@@ -277,11 +277,9 @@ if which("dmrcc", return_bool=True):
 
 # Integrate DFT with driver routines
 for key in functionals:
-    # Only register functionals whose LibXC dependencies are present in the
-    # linked LibXC build. A functional referencing a method missing from this
-    # LibXC (e.g. renamed or added between versions) cannot be built, so it is
-    # not an available method -- skip it rather than aborting `import psi4`.
-    if not functional_available(functionals[key]):
+    # Only register functionals whose LibXC dependencies are present in the linked LibXC build.
+    # Avoids blanket `import psi4` error for unbuildable functionals #3474 .
+    if not superfunctional_available(functionals[key]):
         continue
 
     ssuper = build_superfunctional_from_dictionary(functionals[key], 1, 1, True)[0]

@@ -252,35 +252,29 @@ def check_consistency(func_dictionary):
                 )
 
 
-def libxc_functionals_in_dictionary(func_dictionary):
-    """The LibXC functional names (``XC_``-prefixed, exactly as handed to LibXC
-    by :py:func:`build_superfunctional_from_dictionary`) that a functional
-    definition depends on: the ``xc_functionals`` special case, the
-    ``x_functionals``/``c_functionals`` components, and a GGA borrowed for exact
-    exchange via ``x_hf``/``use_libxc``."""
+def libxc_functionals_in_dictionary(func_dictionary) -> list:
+    """Return the LibXC functional names required by a superfunctional definition."""
     names = []
-    if "xc_functionals" in func_dictionary:
-        names += [("XC_" + key).upper() for key in func_dictionary["xc_functionals"]]
-    if "x_functionals" in func_dictionary:
-        names += [("XC_" + key).upper() for key in func_dictionary["x_functionals"]]
-    if "x_hf" in func_dictionary and "use_libxc" in func_dictionary["x_hf"]:
-        names.append(("XC_" + func_dictionary["x_hf"]["use_libxc"]).upper())
-    if "c_functionals" in func_dictionary:
-        names += [("XC_" + key).upper() for key in func_dictionary["c_functionals"]]
+
+    for section in ("xc_functionals", "x_functionals", "c_functionals"):
+        names.extend(("XC_" + key).upper() for key in func_dictionary.get(section, {}))
+
+    if libxc_fctl_for_hf_exch := func_dictionary.get("x_hf", {}).get("use_libxc"):
+        names.append(("XC_" + libxc_fctl_for_hf_exch).upper())
+
     return names
 
 
-def unavailable_libxc_functionals(func_dictionary):
-    """Of the LibXC functionals a definition needs, those absent from the linked
-    LibXC build (e.g. renamed or newly added between LibXC versions)."""
+def unavailable_libxc_functionals(func_dictionary) -> list:
+    """Of the functionals a superfunctional definition needs, those absent from the linked LibXC."""
     return [name for name in libxc_functionals_in_dictionary(func_dictionary)
             if not core.LibXCFunctional.available(name)]
 
 
-def functional_available(func_dictionary):
-    """Whether every LibXC functional a definition needs is present in the
-    linked LibXC build. A functional that references a missing method cannot be
-    built, so it must not be registered as an available method."""
+def superfunctional_available(func_dictionary) -> bool:
+    """Whether every LibXC functional a definition needs is present in the linked LibXC.
+    Useful to allow conditional Py-side registration, leaving LibXC lib the SSOT.
+    """
     return not unavailable_libxc_functionals(func_dictionary)
 
 
