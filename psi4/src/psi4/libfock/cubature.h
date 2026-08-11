@@ -36,6 +36,7 @@
 #include "psi4/libmints/typedefs.h"
 #include "psi4/libpsi4util/exception.h"
 
+#include <cstdint>
 #include <map>
 #include <vector>
 
@@ -110,6 +111,16 @@ class MolecularGrid {
 
     /// Sieve and block
     void postProcess(std::shared_ptr<BasisExtents> extents, int max_points, int min_points, double max_radius);
+
+   public:
+    /// Total nuclear-position derivative dw/dR of the quadrature weights of
+    /// an atomic block (points ride their parent atom): out(3 natom, npoints).
+    /// Requires DFT_BLOCK_SCHEME = ATOMIC.
+    void compute_weight_gradient(std::shared_ptr<BlockOPoints> block, SharedMatrix out) const;
+    void compute_weight_hessian(std::shared_ptr<BlockOPoints> block, std::shared_ptr<Vector> escal,
+                                SharedMatrix out) const;
+
+   protected:
     void remove_distant_points(double Rcut);
     void block(int max_points, int min_points, double max_radius);
 
@@ -122,6 +133,7 @@ class MolecularGrid {
         short nucscheme;
         short namedGrid;  // -1 = None, 0 = SG-0, 1 = SG-1
         bool remove_distant_points;
+        bool orient_grid;
         int nradpts;
         int nangpts;
         int print;
@@ -393,8 +405,8 @@ class BlockOPoints {
     /// Bounding radius of the BlockOPoints
     double R_;
 
-    /// Parent atom of this BlockOPoints. -1 indicated none has been set.
-    size_t parent_atom_ = -1;
+    /// Parent atom of this BlockOPoints. SIZE_MAX indicates none has been set.
+    size_t parent_atom_ = SIZE_MAX;
 
     /// Populate significant functions given information in extents
     void populate();
@@ -422,7 +434,7 @@ class BlockOPoints {
     void set_parent_atom(size_t atom) { parent_atom_ = atom; };
     /// Parent atom if the current block
     size_t parent_atom() const {
-        if (parent_atom_ >= 0) {
+        if (parent_atom_ != SIZE_MAX) {
             return parent_atom_;
         } else {
             throw PSIEXCEPTION("BlockOPoints: no parent atom set! Wrong blockscheme?");
