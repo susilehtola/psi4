@@ -1868,6 +1868,15 @@ int read_options(const std::string &name, Options &options, bool suppress_printi
         options.add_int("DFT_SPHERICAL_POINTS", 302);
         /*- Number of radial points. -*/
         options.add_int("DFT_RADIAL_POINTS", 75);
+        /*- Number of spherical points for the coarser quadrature grid used to
+        build the XC response kernel (compute_Vx) in CPHF/CPKS/TDDFT. 0 reuses
+        the SCF grid (:term:`DFT_SPHERICAL_POINTS`). Must not exceed the SCF
+        grid. A :ref:`Lebedev Points <table:lebedevorder>` number. !expert -*/
+        options.add_int("DFT_RESPONSE_SPHERICAL_POINTS", 0);
+        /*- Number of radial points for the coarser XC-response (compute_Vx)
+        quadrature grid. 0 reuses the SCF grid (:term:`DFT_RADIAL_POINTS`).
+        Must not exceed the SCF grid. !expert -*/
+        options.add_int("DFT_RESPONSE_RADIAL_POINTS", 0);
         /*- Spherical Scheme. -*/
         options.add_str("DFT_SPHERICAL_SCHEME", "LEBEDEV", "LEBEDEV");
         /*- Radial Scheme. -*/

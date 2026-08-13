@@ -177,6 +177,27 @@ void VBase::set_D(std::vector<SharedMatrix> Dvec) {
 void VBase::initialize() {
     timer_on("V: Grid");
     grid_ = std::make_shared<DFTGrid>(primary_->molecule(), primary_, options_);
+
+    // Optional coarser grid for the XC response kernel (compute_Vx), used by
+    // CPHF/CPKS/TDDFT. Unset (0) reuses the SCF grid, so behaviour is unchanged.
+    int resp_rad = options_.get_int("DFT_RESPONSE_RADIAL_POINTS");
+    int resp_sph = options_.get_int("DFT_RESPONSE_SPHERICAL_POINTS");
+    if (resp_rad > 0 || resp_sph > 0) {
+        std::map<std::string, int> resp_int_map;
+        resp_int_map["DFT_RADIAL_POINTS"] = (resp_rad > 0) ? resp_rad : options_.get_int("DFT_RADIAL_POINTS");
+        resp_int_map["DFT_SPHERICAL_POINTS"] = (resp_sph > 0) ? resp_sph : options_.get_int("DFT_SPHERICAL_POINTS");
+        std::map<std::string, std::string> resp_str_map;
+        response_grid_ = std::make_shared<DFTGrid>(primary_->molecule(), primary_, resp_int_map, resp_str_map, options_);
+        // The shared functional workers are sized to the SCF grid, so the
+        // response grid's blocks must not be larger than the SCF grid's.
+        if (response_grid_->max_points() > grid_->max_points()) {
+            throw PSIEXCEPTION(
+                "VBase: DFT_RESPONSE grid has larger blocks than the SCF grid; "
+                "the response grid must be coarser than (<=) the SCF grid.");
+        }
+    } else {
+        response_grid_ = grid_;
+    }
     timer_off("V: Grid");
 
     for (size_t i = 0; i < num_threads_; i++) {
@@ -1256,6 +1277,20 @@ void RV::initialize() {
         point_tmp->set_cache_map(&cache_map_);
         point_workers_.push_back(point_tmp);
     }
+    // Point workers for the XC-response grid. When it is the SCF grid, reuse
+    // the (cached) SCF workers; otherwise build a separate uncached set sized
+    // to response_grid_ (mirrors the VV10 local-worker pattern).
+    if (response_grid_ == grid_) {
+        response_point_workers_ = point_workers_;
+    } else {
+        int r_max_points = response_grid_->max_points();
+        int r_max_functions = response_grid_->max_functions();
+        for (size_t i = 0; i < num_threads_; i++) {
+            auto point_tmp = std::make_shared<RKSFunctions>(primary_, r_max_points, r_max_functions);
+            point_tmp->set_ansatz(functional_->ansatz());
+            response_point_workers_.push_back(point_tmp);
+        }
+    }
 }
 void RV::finalize() { VBase::finalize(); }
 void RV::print_header() const { VBase::print_header(); }
@@ -2127,15 +2162,15 @@ void RV::compute_Vx_full(std::vector<SharedMatrix> Dx, std::vector<SharedMatrix>
     // What local XC ansatz are we in?
     int ansatz = functional_->ansatz();
 
-    auto old_point_deriv = point_workers_[0]->deriv();
+    auto old_point_deriv = response_point_workers_[0]->deriv();
     auto old_func_deriv = functional_->deriv();
 
     // How many functions are there (for lda in Vtemp, T)
-    auto max_functions = grid_->max_functions();
-    auto max_points = grid_->max_points();
+    auto max_functions = response_grid_->max_functions();
+    auto max_points = response_grid_->max_points();
 
     // Set pointers to SCF density
-    for (const auto& worker: point_workers_) {
+    for (const auto& worker: response_point_workers_) {
         worker->set_pointers(D_AO_[0]);
     }
 
@@ -2185,7 +2220,7 @@ void RV::compute_Vx_full(std::vector<SharedMatrix> Dx, std::vector<SharedMatrix>
     // => Compute Vx <=
     // Remember that this function computes the α block of the output, divided by 2.
 #pragma omp parallel for private(rank) schedule(guided) num_threads(num_threads_)
-    for (size_t Q = 0; Q < grid_->blocks().size(); Q++) {
+    for (size_t Q = 0; Q < response_grid_->blocks().size(); Q++) {
         // ==> Define block/thread-specific variables <==
 #ifdef _OPENMP
         rank = omp_get_thread_num();
@@ -2193,14 +2228,14 @@ void RV::compute_Vx_full(std::vector<SharedMatrix> Dx, std::vector<SharedMatrix>
 
         // => Setup <= //
         auto fworker = functional_workers_[rank];
-        auto pworker = point_workers_[rank];
+        auto pworker = response_point_workers_[rank];
         auto Vx_localp = R_Vx_local[rank]->pointer();
         auto Dx_localp = R_Dx_local[rank]->pointer();
 
         // => Compute blocks <= //
         auto Tp = pworker->scratch()[0]->pointer();
 
-        auto block = grid_->blocks()[Q];
+        auto block = response_grid_->blocks()[Q];
         auto npoints = block->npoints();
         auto w = block->w();
         const auto& function_map = block->functions_local_to_global();
@@ -3730,6 +3765,19 @@ void UV::initialize() {
         point_tmp->set_ansatz(functional_->ansatz());
         point_tmp->set_cache_map(&cache_map_);
         point_workers_.push_back(point_tmp);
+    }
+    // Point workers for the XC-response grid (see RV::initialize).
+    if (response_grid_ == grid_) {
+        response_point_workers_ = point_workers_;
+    } else {
+        int r_max_points = response_grid_->max_points();
+        int r_max_functions = response_grid_->max_functions();
+        for (size_t i = 0; i < num_threads_; i++) {
+            std::shared_ptr<PointFunctions> point_tmp =
+                std::make_shared<UKSFunctions>(primary_, r_max_points, r_max_functions);
+            point_tmp->set_ansatz(functional_->ansatz());
+            response_point_workers_.push_back(point_tmp);
+        }
     }
 }
 void UV::finalize() { VBase::finalize(); }
@@ -5549,15 +5597,15 @@ void UV::compute_Vx(std::vector<SharedMatrix> Dx, std::vector<SharedMatrix> ret)
     // What local XC ansatz are we in?
     auto ansatz = functional_->ansatz();
 
-    auto old_point_deriv = point_workers_[0]->deriv();
+    auto old_point_deriv = response_point_workers_[0]->deriv();
     auto old_func_deriv = functional_->deriv();
 
     // How many functions are there (for lda in Vtemp, T)
-    auto max_functions = grid_->max_functions();
-    auto max_points = grid_->max_points();
+    auto max_functions = response_grid_->max_functions();
+    auto max_points = response_grid_->max_points();
 
     // Set pointers to SCF density
-    for (const auto& worker: point_workers_) {
+    for (const auto& worker: response_point_workers_) {
         worker->set_pointers(D_AO_[0], D_AO_[1]);
     }
 
@@ -5625,7 +5673,7 @@ void UV::compute_Vx(std::vector<SharedMatrix> Dx, std::vector<SharedMatrix> ret)
 
     // => Compute Vx <=
 #pragma omp parallel for private(rank) schedule(guided) num_threads(num_threads_)
-    for (size_t Q = 0; Q < grid_->blocks().size(); Q++) {
+    for (size_t Q = 0; Q < response_grid_->blocks().size(); Q++) {
         // ==> Define block/thread-specific variables <==
 #ifdef _OPENMP
         rank = omp_get_thread_num();
@@ -5633,7 +5681,7 @@ void UV::compute_Vx(std::vector<SharedMatrix> Dx, std::vector<SharedMatrix> ret)
 
         // => Setup <= //
         auto fworker = functional_workers_[rank];
-        auto pworker = point_workers_[rank];
+        auto pworker = response_point_workers_[rank];
         auto Vax_localp = R_Vax_local[rank]->pointer();
         auto Vbx_localp = R_Vbx_local[rank]->pointer();
         auto Dax_localp = R_Dax_local[rank]->pointer();
@@ -5643,7 +5691,7 @@ void UV::compute_Vx(std::vector<SharedMatrix> Dx, std::vector<SharedMatrix> ret)
         auto Tap = pworker->scratch()[0]->pointer();
         auto Tbp = pworker->scratch()[1]->pointer();
 
-        auto block = grid_->blocks()[Q];
+        auto block = response_grid_->blocks()[Q];
         auto npoints = block->npoints();
         auto w = block->w();
         const auto& function_map = block->functions_local_to_global();

@@ -80,6 +80,13 @@ class PSI_API VBase {
     std::vector<std::shared_ptr<PointFunctions>> point_workers_;
     /// Integration grid, built by KSPotential
     std::shared_ptr<DFTGrid> grid_;
+    /// Optional coarser grid for the XC response kernel (compute_Vx); aliases
+    /// grid_ unless DFT_RESPONSE_{RADIAL,SPHERICAL}_POINTS request a separate,
+    /// coarser grid for CPHF/CPKS/TDDFT.
+    std::shared_ptr<DFTGrid> response_grid_;
+    /// Point workers for response_grid_; alias point_workers_ when the response
+    /// grid is the SCF grid, otherwise a separate set sized to response_grid_.
+    std::vector<std::shared_ptr<PointFunctions>> response_point_workers_;
     /// Quadrature values obtained during integration
     std::map<std::string, double> quad_values_;
     // Caches collocation grids
